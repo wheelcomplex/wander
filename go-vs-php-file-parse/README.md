@@ -3,26 +3,47 @@
 
 ## usage(for ubuntu 15.04):
 
-0) compile go parser: git clone https://github.com/wheelcomplex/wander.git && cd wander/go-vs-php-file-parse && go build -o parser && ./parser -h
+0) compile go parser: 
+<pre>
+git clone https://github.com/wheelcomplex/wander.git
 
-1) create testdata(100m lines, 4768 MB): ./parser -f 100m.lines.testdata.txt -force -gen -line 100
+cd wander/go-vs-php-file-parse 
 
+go build -o parser 
+
+./parser -h
+</pre>
+
+1) create testdata(100m lines, 4768 MB): 
+<pre>
+./parser -f 100m.lines.testdata.txt -force -gen -line 100
+</pre>
+<pre>
 go-file-parser 2015/12/28 11:57:19 generating 100m.lines.testdata.txt, 100000000 lines, 4768 MB, be ware free disk spaces!
 go-file-parser 2015/12/28 11:57:32 waiting for disk flush ...
 go-file-parser 2015/12/28 11:57:36 100m.lines.testdata.txt generated in 13.421370918s, MD5SUM 78bf6a0b60c643d3555b43258380f4c5, 100000000 lines, 4768 MB, 355 MB/s.
+</pre>
 
 2) run go parser: ./parser -f 100m.lines.testdata.txt
 
-3) or run go parser with http profile: ./parser -f 100m.lines.testdata.txt -profile
-
+3) or run go parser with http profile: 
+<pre>
+./parser -f 100m.lines.testdata.txt -profile
+</pre>
+<pre>
 go-file-parser 2015/12/28 11:59:22 Go, parsing 100m.lines.testdata.txt(4768 MB), read buffer size 65535 ...
 go-file-parser 2015/12/28 12:00:03 read done, 100000000 lines, 5000000000 bytes, parse size 486436015838
 go-file-parser 2015/12/28 12:00:03 Go, parsed file 100m.lines.testdata.txt in 40.68259091s, 100000000 lines, 4768 MB, 117 MB/s.
+</pre>
 
-4) run php 7.0 parser: php7.0 parser.php -f 100m.lines.testdata.txt
-
+4) run php 7.0 parser: 
+<pre>
+php7.0 parser.php -f 100m.lines.testdata.txt
+</pre>
+<pre>
 php 7.0, parsing file 100m.lines.testdata.txt(4768 MB) ...
 php, parsed file 100m.lines.testdata.txt in 58.465, 100000001 lines, 4673 MB, speed 79 MB/s
+</pre>
 
 ## tips for Go parser:
 
