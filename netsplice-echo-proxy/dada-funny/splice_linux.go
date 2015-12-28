@@ -13,6 +13,9 @@ import (
 )
 
 const (
+
+	// http://linux.die.net/man/2/splice
+
 	// SPLICE_F_MOVE hints to the kernel to
 	// move page references rather than memory.
 	fSpliceMove = 0x01
@@ -123,7 +126,9 @@ func (s *splicePipe) readFrom(src *netFD) error {
 read:
 	// The socket->pipe splice *must* be SPLICE_F_NONBLOCK,
 	// because if the pipe write blocks, then we'll deadlock.
-	n, eno := rawsplice(src.sysfd, s.wfd, int(amt), fSpliceMove|fSpliceMore|fSpliceNonblock)
+	// n, eno := rawsplice(src.sysfd, s.wfd, int(amt), fSpliceMove|fSpliceMore|fSpliceNonblock)
+	// disable fSpliceMore for response time
+	n, eno := rawsplice(src.sysfd, s.wfd, int(amt), fSpliceMove|fSpliceNonblock)
 	if eno == syscall.EAGAIN {
 		if canRead {
 			// we must be blocking b/c
@@ -170,9 +175,10 @@ func (s *splicePipe) writeTo(dst *netFD) error {
 	// EAGAIN will only occur if the socket would block
 	flags := fSpliceMove
 	// if we have more data to write, hint w/ SPLICE_F_MORE
-	if s.toread != 0 {
-		flags |= fSpliceMore
-	}
+	// disable fSpliceMore for response time
+	//	if s.toread != 0 {
+	//		flags |= fSpliceMore
+	//	}
 
 write:
 	n, eno := rawsplice(s.rfd, dst.sysfd, int(s.inbuf), flags)
