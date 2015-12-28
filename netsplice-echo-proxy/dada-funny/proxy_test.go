@@ -5,13 +5,10 @@ import (
 	"io"
 	"math/rand"
 	"net"
-	"runtime"
 	"testing"
 )
 
 func Test_Proxy(t *testing.T) {
-	println(runtime.GOMAXPROCS(0))
-
 	// Setup a echo server
 	backendLsn, err := net.Listen("tcp", "0.0.0.0:0")
 	if err != nil {
@@ -62,7 +59,7 @@ func Test_Proxy(t *testing.T) {
 		b1 := RandBytes(256)
 		b2 := make([]byte, len(b1))
 		x += len(b1)
-		println(x)
+		//println(x)
 
 		//println("write", len(b1))
 		_, err := conn.Write(b1)

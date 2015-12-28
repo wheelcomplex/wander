@@ -5,10 +5,10 @@ package lab04
 import (
 	"errors"
 	"net"
+	"os"
 	"sync"
 	"sync/atomic"
 	"syscall"
-	"time"
 	"unsafe"
 )
 
@@ -103,6 +103,7 @@ func (pd *netPD) Close() {
 
 type netFD struct {
 	sysfd int
+	file  *os.File
 	pd    netPD
 }
 
@@ -196,6 +197,7 @@ func (p *Proxy) addConn(conn net.Conn) (*netFD, error) {
 	// must add to connection list before add to epoll.
 	nfd := &netFD{
 		sysfd: sysfd,
+		file:  file,
 	}
 	nfd.pd.wcond.L = dummpMutex{}
 	nfd.pd.rcond.L = dummpMutex{}
@@ -222,13 +224,11 @@ func (p *Proxy) delConn(nfd *netFD) {
 func (p *Proxy) eventLoop() {
 	var events [20]syscall.EpollEvent
 	for {
-		t1 := time.Now()
-		n, eno := rawEpollWait(p.fd, events[:], -1)
-		if eno != 0 {
-			println("epoll wait failed, eno =", eno)
+		n, err := syscall.EpollWait(p.fd, events[:], -1)
+		if err != nil {
+			println("epoll wait failed, eno =", err.Error)
 			break
 		}
-		println("epoll wait", time.Since(t1).String())
 		for i := 0; i < n; i++ {
 			nfd := p.getFD(int(events[i].Fd))
 			if nfd == nil {
@@ -237,6 +237,7 @@ func (p *Proxy) eventLoop() {
 			evs := events[i].Events
 
 			if evs&(EPOLLERR|EPOLLHUP|EPOLLRDHUP) != 0 {
+				//println("closed")
 				nfd.Close()
 				continue
 			}

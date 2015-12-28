@@ -60,6 +60,9 @@ func splice(dst *netFD, src *netFD, amt int64) (int64, error, bool) {
 			break
 		}
 		err = sp.writeTo(dst)
+		if err != nil {
+			break
+		}
 	}
 	err1 := sp.flush(dst)
 	if err == nil {
