@@ -16,8 +16,18 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"time"
 )
+
+//
+type stat struct {
+	lines uint64
+	bytes uint64
+	sizes uint64
+	done  bool
+	err   error
+}
 
 // line split
 var RETURN = []byte("\n")
@@ -43,10 +53,13 @@ func main() {
 	var force bool
 
 	// input file lines
-	var filelines int
+	var filelines uint64
 
 	//
 	var profile bool
+
+	//
+	var showstat bool
 
 	flag.StringVar(&filename, "f", "", "input file name")
 
@@ -54,13 +67,15 @@ func main() {
 
 	flag.IntVar(&readbufsize, "s", 65535, "read buffer size(>= 512)")
 
-	flag.IntVar(&filelines, "line", 1, "file lines in million(1,000,000), 1 million used 47 MB disk spaces")
+	flag.Uint64Var(&filelines, "line", 1, "file lines in million(1,000,000), 1 million used 47 MB disk spaces")
 
 	flag.BoolVar(&force, "force", false, "force overwrite existed output file")
 
 	flag.BoolVar(&gen, "gen", false, "generate input file")
 
 	flag.BoolVar(&profile, "profile", false, "enable http profile")
+
+	flag.BoolVar(&showstat, "stat", false, "show parser stat every 5 seconds")
 
 	flag.Parse()
 	if help {
@@ -73,7 +88,7 @@ func main() {
 	}
 
 	if filename == "" {
-		filename = strconv.Itoa(filelines) + "m.lines.testdata.txt"
+		filename = strconv.FormatInt(int64(filelines), 10) + "m.lines.testdata.txt"
 	}
 
 	// generate input file in consistent
@@ -118,7 +133,7 @@ func main() {
 		h := md5.New()
 		shift := 0
 		maxshift := len(seedBuf) - 100
-		for count := 0; count < totalline; count++ {
+		for count := uint64(0); count < totalline; count++ {
 			// for speedy, use copy and fill space
 			copy(linebuf, seedBuf[seekpos:seekpos+49])
 			for i := 4; i < 49; i = i + 5 {
@@ -167,11 +182,11 @@ func main() {
 		os.Exit(0)
 	}
 
-	stat, err := os.Stat(filename)
+	filestat, err := os.Stat(filename)
 	if err != nil {
 		l.Fatalf("stat input file %s failed: %s\n", filename, err)
 	}
-	if stat.IsDir() {
+	if filestat.IsDir() {
 		l.Fatalf("input file %s is directory.\n", filename)
 	}
 
@@ -203,45 +218,102 @@ func main() {
 		defer ln.Close()
 	}
 
-	startts := time.Now()
+	l.Printf("Go, parsing %s(%d MB), read buffer size %d ...\n", filename, filestat.Size()/1024/1024, readbufsize)
 
-	var filesize int
-	var totalline int
+	var wg sync.WaitGroup
 
-	l.Printf("Go, parsing %s(%d MB), read buffer size %d ...\n", filename, stat.Size()/1024/1024, readbufsize)
-	totalline, filesize, _, err = parser(bufiofd)
-	if err != nil {
-		l.Fatalf("parse failed: %s\n", err)
+	// big chan size for not blocking parser
+	statCh := make(chan *stat, 8192)
+	wg.Add(1)
+	go show(statCh, l, &wg)
+	// wait for show initial
+	time.Sleep(5 * time.Microsecond)
+
+	var result *stat
+
+	if showstat {
+		result = parser(bufiofd, statCh, 5)
+	} else {
+		result = parser(bufiofd, nil, 5)
+	}
+	if result.err != nil {
+		l.Fatalf("parse failed: %s\n", result.err)
 	}
 	bufiofd.Reset(nil)
-	esp := time.Now().Sub(startts)
-	if esp <= 0 {
-		esp = 1
-	}
-	// to MB/s
-	bw := time.Duration(filesize) * time.Second / esp / 1024 / 1024
-	l.Printf("Go, parsed file %s in %v, %d lines, %d MB, %d MB/s.\n", filename, esp, totalline, filesize/1024/1024, bw)
+	statCh <- result
+	wg.Wait()
+	// wait for last stat
 	return
 }
 
+//
+func show(statCh chan *stat, l *log.Logger, wg *sync.WaitGroup) {
+	defer wg.Done()
+	startts := time.Now()
+	prets := time.Now()
+	nowts := time.Now()
+	var prebytes, totalbw, curbw uint64
+	var secMutil uint64 = uint64(time.Second) / 1048576
+	for {
+		result := <-statCh
+		nowts = time.Now()
+		esp := nowts.Sub(prets)
+		totalesp := nowts.Sub(startts)
+		if esp <= 0 {
+			esp = 1
+		}
+		if totalesp <= 0 {
+			totalesp = 1
+		}
+		// overflow check
+		if result.bytes > uint64(totalesp) {
+			totalbw = secMutil * (result.bytes / uint64(totalesp))
+		} else {
+			totalbw = (secMutil * result.bytes) / uint64(totalesp)
+		}
+		curbw = (secMutil * (result.bytes - prebytes)) / uint64(esp)
+		if result.done {
+			// parser is done
+			l.Printf("total time esp %v(%v), %d lines, %d(%dMB), %d(%d) MB/s.\n", totalesp, esp, result.lines, result.bytes, result.bytes/1024/1024, totalbw, curbw)
+			return
+		} else {
+			l.Printf("      time esp %v(%v), %d lines, %d(%dMB), %d(%d) MB/s.\n", totalesp, esp, result.lines, result.bytes, result.bytes/1024/1024, totalbw, curbw)
+		}
+		prets = nowts
+		prebytes = result.bytes
+	}
+}
+
 // logic from http://www.oschina.net/question/938918_2145778?fromerr=ZAS07vf6
-func parser(bfRd *bufio.Reader) (totalline int, totalbytes int, totalparsesize int64, err error) {
+func parser(bfRd *bufio.Reader, statCh chan *stat, interval int) *stat {
 	var line []byte
 	var slice [][]byte
 	var size int64
+	var err error
+
+	result := &stat{}
+
+	if interval <= 0 {
+		interval = 5
+	}
+	tk := time.NewTicker(time.Duration(interval) * time.Second)
+	defer tk.Stop()
 
 	for {
 		line, err = bfRd.ReadSlice('\n')
 		if err != nil {
 			if err == io.EOF {
-				l.Printf("read done, %d lines, %d bytes, parse size %d\n", totalline, totalbytes, totalparsesize)
+				//l.Printf("read done, %d lines, %d bytes, parse size %d\n", result.lines, result.bytes, result.sizes)
 				err = nil
-				return
+			} else {
+				l.Fatalf("read failed: %s\n", err.Error())
 			}
-			l.Fatalf("read failed, %d lines, %d bytes, parse size %d: %s\n", totalline, totalbytes, totalparsesize, err.Error())
+			result.err = err
+			result.done = true
+			return result
 		}
-		totalbytes += len(line)
-		totalline++
+		result.bytes += uint64(len(line))
+		result.lines++
 		slice = bytes.SplitN(line, SPACE, 10)
 		if len(slice) < 9 {
 			l.Printf("invalid line, splited less then 9(%d): %s\n", len(slice), slice)
@@ -252,7 +324,15 @@ func parser(bfRd *bufio.Reader) (totalline int, totalbytes int, totalparsesize i
 			l.Printf("invalid lenght %s: %s\n", slice[8], err.Error())
 			size = 0
 		}
-		totalparsesize += size
+		result.sizes += uint64(size)
+		if statCh != nil {
+			// send stat
+			select {
+			case <-tk.C:
+				statCh <- result
+			default:
+			}
+		}
 	}
 }
 
