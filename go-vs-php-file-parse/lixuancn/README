@@ -1,3 +1,6 @@
+update from wheelcomplex: after change the go parser to match same logic in php parser, it looks like go parser is faster(not very much),
+check https://github.com/wheelcomplex/wander/issues/1 for detial.
+-----
 Go文件:test_main.go
 PHP文件:test_php.go
 测试文件:test_log2.log 18M
@@ -15,3 +18,4 @@ bytes.SplitN将性能提高了7倍左右,基本与PHP7持平.
 我是Go的初学者,抛出了一个问题,你们让我感到了温暖.在国内社区,我收到的多是"这是单纯比较磁盘IO","Go擅长并发","呵呵!".
 
 谢谢!
+
