@@ -36,6 +36,12 @@ go-file-parser 2015/12/28 12:00:03 read done, 100000000 lines, 5000000000 bytes,
 go-file-parser 2015/12/28 12:00:03 Go, parsed file 100m.lines.testdata.txt in 40.68259091s, 100000000 lines, 4768 MB, 117 MB/s.
 </pre>
 
+update: after https://github.com/wheelcomplex/wander/commit/845e7d6f38e43601446199096e915b7ba85c3c77 go parser got 3x faster:
+<pre>
+go-file-parser 2015/12/30 16:28:33 Go, parsing 100m.lines.testdata.txt(4768 MB), read buffer size 65535 ...
+go-file-parser 2015/12/30 16:28:46 total time esp 13.587439632s(13.587439549s), 100000000 lines, 5000000000(4768MB), 350(350) MB/s.
+</pre>
+
 4) run php 7.0 parser: 
 <pre>
 php7.0 parser.php -f 100m.lines.testdata.txt
