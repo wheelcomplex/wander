@@ -4,8 +4,8 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"crypto/md5"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -28,10 +28,6 @@ type stat struct {
 	done  bool
 	err   error
 }
-
-// line split
-var RETURN = []byte("\n")
-var SPACE = []byte(" ")
 
 // default logger
 var l = log.New(os.Stderr, "go-file-parser ", log.LstdFlags)
@@ -284,11 +280,71 @@ func show(statCh chan *stat, l *log.Logger, wg *sync.WaitGroup) {
 	}
 }
 
+// AtoiString a simple Atoi() function for base 10 only,
+// invalid slice will convert to zero
+func AtoIntOfBytes(s []byte) (int, error) {
+	var res int = 0
+	var isnav bool
+
+	for idx, char := range s {
+		if idx == 0 && char == '-' {
+			isnav = true
+			continue
+		}
+		if char < '0' || char > '9' {
+			return 0, errors.New("invalid number slice " + string(s))
+		}
+		res = res*10 + int(char) - '0'
+	}
+	if isnav {
+		res = -res
+	}
+	return res, nil
+}
+
+// SplitBytes slices s into subslices separated by sep and save into result a slice of
+// the subslices between those separators.
+// Will extend if result have not enough space to hold return [][]byte.
+// The count determines the number of subslices to return:
+//   n > 0: at most n subslices; the last subslice will be the unsplit remainder.
+//   n == 0: the result is empty [][]byte
+//   n < 0: all subslices
+// warning, if not bytes exist befor sep, subslice will be []byte{}.
+//
+func SplitBytes(s []byte, sep byte, n int, result [][]byte) [][]byte {
+	if n == 0 {
+		return result
+	}
+	if len(result) > 0 {
+		result = result[:0]
+	}
+	if n > 0 {
+		n--
+	}
+	rcnt := 0
+	pos := 0
+	for idx, char := range s {
+		if char == sep {
+			rcnt++
+			if n > 0 && rcnt > n {
+				result = append(result, s[pos:])
+				pos = len(s)
+				break
+			}
+			result = append(result, s[pos:idx])
+			pos = idx + 1
+		}
+	}
+	if pos < len(s) {
+		result = append(result, s[pos:])
+	}
+	return result
+}
+
 // logic from http://www.oschina.net/question/938918_2145778?fromerr=ZAS07vf6
 func parser(bfRd *bufio.Reader, statCh chan *stat, interval int) *stat {
 	var line []byte
 	var slice [][]byte
-	var size int64
 	var err error
 
 	result := &stat{}
@@ -314,14 +370,14 @@ func parser(bfRd *bufio.Reader, statCh chan *stat, interval int) *stat {
 		}
 		result.bytes += uint64(len(line))
 		result.lines++
-		slice = bytes.SplitN(line, SPACE, 10)
+		slice = SplitBytes(line, ' ', 10, slice)
 		if len(slice) < 9 {
 			l.Printf("invalid line, splited less then 9(%d): %s\n", len(slice), slice)
 			continue
 		}
-		size, err = strconv.ParseInt(string(slice[8]), 10, 0)
+		size, err := AtoIntOfBytes(slice[8])
 		if err != nil {
-			l.Printf("invalid lenght %s: %s\n", slice[8], err.Error())
+			l.Printf("warning: %s\n", err.Error())
 			size = 0
 		}
 		result.sizes += uint64(size)
