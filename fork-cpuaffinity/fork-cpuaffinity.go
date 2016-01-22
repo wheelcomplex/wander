@@ -370,7 +370,7 @@ func sigHandle(tag string, sigChan, exitNotifyChan chan os.Signal, notifys []os.
 			if val == sig {
 				exitNotifyChan <- sig
 				if len(tag) > 0 {
-					fmt.Printf("%s notifyed signal: %d/%s\n", tag, sig, sig.String())
+					fmt.Printf("\nsignal handle of %s, notifyed signal: %d/%s\n", tag, sig, sig.String())
 					notifyed = true
 				}
 				break
@@ -381,15 +381,15 @@ func sigHandle(tag string, sigChan, exitNotifyChan chan os.Signal, notifys []os.
 				if val == sig {
 					exiting = true
 					exitNotifyChan <- sig
-					fmt.Printf("\n%s send exiting signal: %d/%s\n", tag, sig, sig.String())
+					fmt.Printf("\nsignal handle of %s, sant exiting signal: %d/%s\n", tag, sig, sig.String())
 					break
 				}
 			}
 			if exiting == false && len(tag) > 0 && notifyed == false {
-				fmt.Printf("\n%s exiting signal ignored: %d/%s\n", tag, sig, sig.String())
+				fmt.Printf("\nsignal handle of %s, exiting signal ignored: %d/%s\n", tag, sig, sig.String())
 			}
 		} else if len(tag) > 0 && notifyed == false {
-			fmt.Printf("%s ignored signal: %d/%s\n", tag, sig, sig.String())
+			fmt.Printf("\nsignal handle of %s, ignored signal: %d/%s\n", tag, sig, sig.String())
 		}
 	}
 }
